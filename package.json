@@ -1,0 +1,30 @@
+{
+  "name": "cloud-download-bundle-colab",
+  "version": "1.2.0",
+  "description": "PikPak-style cloud download MVP for Colab: Node API + SQLite + aria2 RPC worker + tunnel",
+  "main": "backend/src/server.js",
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "aria2": "node backend/src/tools/start-aria2-rpc.js",
+    "worker": "node backend/src/workers/download.worker.js",
+    "dev": "concurrently \"npm start\" \"npm run aria2\" \"npm run worker\"",
+    "colab:install": "bash colab_install.sh",
+    "colab:start": "bash colab_start.sh",
+    "colab:tunnel": "bash colab_tunnel.sh",
+    "colab:logs": "tail -n 80 -f logs/app.log logs/aria2.log logs/worker.log"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mime-types": "^2.1.35",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": "20.x"
+  }
+}

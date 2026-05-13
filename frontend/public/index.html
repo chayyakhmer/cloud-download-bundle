@@ -1,0 +1,304 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cloud Download MVP</title>
+  <style>
+    :root {
+      --blue:#2563eb; --blue2:#dbeafe; --bg:#f4f6f8; --text:#111827; --muted:#6b7280;
+      --line:#e5e7eb; --red:#ef4444; --green:#16a34a; --card:#fff;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+    header { background: #111827; color: white; padding: 18px 28px; font-size: 22px; font-weight: 700; }
+    main { max-width: 1050px; margin: 24px auto 100px; padding: 0 16px; }
+    .card { background: var(--card); border-radius: 14px; padding: 20px; box-shadow: 0 6px 22px rgba(0,0,0,.08); margin-bottom: 18px; }
+    textarea { width: 100%; height: 150px; border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; font-size: 14px; resize: vertical; }
+    input { padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 10px; }
+    button { border: 0; background: var(--blue); color: white; padding: 11px 16px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+    button:hover { background: #1d4ed8; }
+    .ghost { background: transparent; color: #111827; }
+    .ghost:hover { background: #f3f4f6; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+    .taskDock {
+      position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+      height: 62px; min-width: 312px; background: rgba(255,255,255,.96);
+      border: 1px solid #d1d5db; border-radius: 16px; box-shadow: 0 10px 28px rgba(0,0,0,.12);
+      display: flex; align-items: center; justify-content: center; gap: 22px; padding: 8px 18px; z-index: 40;
+      backdrop-filter: blur(8px);
+    }
+    .dockItem { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; color:#374151; cursor: pointer; user-select: none; }
+    .dockItem.active { background: #eff6ff; color: var(--blue); }
+    .dockItem:hover { background:#f3f4f6; }
+    .dockIcon { font-size: 21px; line-height: 1; }
+    .dockCount { min-width: 18px; font-size:14px; color:#111827; }
+    .chev { font-size: 18px; color:#6b7280; cursor:pointer; padding: 8px; }
+
+    .overlay { position: fixed; inset: 0; display: none; z-index: 50; background: rgba(0,0,0,.18); }
+    .overlay.show { display: block; }
+    .taskModal {
+      position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
+      width: min(640px, calc(100vw - 22px)); height: min(505px, calc(100vh - 115px));
+      background:#fff; border:1px solid #d1d5db; border-radius: 16px; box-shadow: 0 18px 50px rgba(0,0,0,.22);
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+    .modalHeader { height: 58px; display:flex; align-items:center; justify-content:space-between; padding: 0 18px; border-bottom:1px solid #f1f5f9; }
+    .modalTitle { font-size: 16px; font-weight: 800; display:flex; align-items:center; gap:10px; }
+    .modalActions { display:flex; align-items:center; gap:8px; }
+    .iconBtn { width:36px; height:36px; display:grid; place-items:center; border-radius:10px; background:transparent; color:#374151; padding:0; font-size:18px; }
+    .iconBtn:hover { background:#f3f4f6; }
+    .retryAll { color:#111827; background:transparent; padding: 8px 4px; }
+    .retryAll:hover { background:transparent; color:var(--blue); }
+    .taskList { overflow:auto; flex:1; }
+    .taskRow { display:grid; grid-template-columns: 34px 1fr auto; gap:10px; padding: 12px 14px; align-items:center; border-bottom:1px solid #f1f5f9; }
+    .taskRow:hover { background:#f8fafc; }
+    .fileIcon { width:27px; height:27px; border-radius:6px; display:grid; place-items:center; font-size:14px; background:#fbbf24; color:#fff; font-weight:800; }
+    .fileIcon.video { background:#7795ff; }
+    .fileIcon.unknown { background:#cbd5e1; }
+    .taskName { font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .taskMeta { margin-top:4px; font-size:12px; color: var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .taskMeta .err { color: var(--red); }
+    .taskMeta .ok { color: var(--green); }
+    .miniProgress { margin-top:8px; width:100%; height:6px; border-radius: 100px; background:#e5e7eb; overflow:hidden; }
+    .miniProgress div { height:100%; background:var(--blue); width:0%; }
+    .retry { color:#6b7280; background:transparent; padding:8px; font-size:19px; }
+    .more { color:#9ca3af; background:transparent; padding:7px; font-size:18px; }
+    .taskActions { display:flex; align-items:center; gap:6px; justify-content:flex-end; }
+    .smallBtn { border:1px solid #d1d5db; background:#fff; color:#374151; padding:6px 8px; border-radius:8px; font-size:12px; font-weight:700; }
+    .smallBtn:hover { background:#f3f4f6; }
+    .smallBtn.primary { background:var(--blue); border-color:var(--blue); color:#fff; }
+    .smallBtn.danger { color:#dc2626; border-color:#fecaca; }
+    .smallBtn.pause { color:#92400e; border-color:#fde68a; }
+    .modalFooter { height: 58px; border-top:1px solid #e5e7eb; display:flex; align-items:center; justify-content:center; gap:26px; background:#f8fafc; }
+    .footerTab { display:flex; align-items:center; gap:7px; padding:9px 13px; border-radius:10px; cursor:pointer; color:#374151; }
+    .footerTab.active { background:#e0e7ff; color:var(--blue); }
+    .empty { padding: 50px 16px; text-align:center; color:#6b7280; }
+    .hiddenPanel { display:none; }
+  </style>
+</head>
+<body>
+<header>Cloud Download MVP</header>
+<main>
+  <section class="card">
+    <h2>Create Cloud Download Task</h2>
+    <p class="muted">Paste direct links, magnet links, or video platform links. One link per line.</p>
+    <textarea id="links" placeholder="Supported link formats:
+- magnet:?xt=urn:btih:...
+- https://example.com/file.zip
+- YouTube / TikTok / Facebook / X links"></textarea>
+    <div class="row" style="margin-top:12px">
+      <label>Save to:</label>
+      <input id="folder" value="Default Folder" />
+      <button onclick="createTasks()">+ Create Now</button>
+    </div>
+  </section>
+
+  <section class="card hiddenPanel">
+    <div class="row" style="justify-content:space-between">
+      <h2>Tasks</h2>
+      <button onclick="loadTasks()">Refresh</button>
+    </div>
+    <div id="oldTaskTable"></div>
+  </section>
+</main>
+
+<div class="taskDock">
+  <div class="dockItem active" onclick="openTaskModal('downloading')"><span class="dockIcon">🔗</span><span class="dockCount" id="countDownloading">0</span></div>
+  <div class="dockItem" onclick="openTaskModal('uploading')"><span class="dockIcon">⇧</span><span class="dockCount" id="countUploading">0</span></div>
+  <div class="dockItem" onclick="openTaskModal('completed')"><span class="dockIcon">✓</span><span class="dockCount" id="countCompleted">0</span></div>
+  <span class="chev" onclick="toggleTaskModal()" id="dockChevron">⌃</span>
+</div>
+
+<div class="overlay" id="taskOverlay" onclick="closeTaskModal(event)">
+  <div class="taskModal" onclick="event.stopPropagation()">
+    <div class="modalHeader">
+      <div class="modalTitle"><button class="iconBtn" onclick="hideTaskModal()">‹</button><span id="modalTitle">Download Tasks</span></div>
+      <div class="modalActions">
+        <button class="retryAll" onclick="retryFailed()">Retry All</button>
+        <button class="iconBtn" onclick="loadTasks()">↻</button>
+        <button class="iconBtn" onclick="clearCompletedLocal()">🗑</button>
+      </div>
+    </div>
+    <div class="taskList" id="modalTaskList"></div>
+    <div class="modalFooter">
+      <div class="footerTab active" data-tab="downloading" onclick="setTaskTab('downloading')">🔗 <span id="footerDownloading">0</span></div>
+      <div class="footerTab" data-tab="uploading" onclick="setTaskTab('uploading')">⇧ <span id="footerUploading">0</span></div>
+      <div class="footerTab" data-tab="completed" onclick="setTaskTab('completed')">✓ <span id="footerCompleted">0</span></div>
+      <div class="footerTab" data-tab="failed" onclick="setTaskTab('failed')">⚠ <span id="footerFailed">0</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let allTasks = [];
+let currentTab = 'downloading';
+let modalOpen = false;
+
+async function createTasks() {
+  const links = document.getElementById('links').value.split('\n').map(x => x.trim()).filter(Boolean);
+  const folder = document.getElementById('folder').value || 'Default Folder';
+  if (!links.length) return alert('Please paste at least one link.');
+  const res = await fetch('/api/tasks', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ links, folder })
+  });
+  const data = await res.json();
+  if (!data.success) alert(data.error || 'Failed');
+  document.getElementById('links').value = '';
+  await loadTasks();
+  openTaskModal('downloading');
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+function shortName(t) {
+  if (t.display_name) return t.display_name;
+  if (t.final_path) return t.final_path.split(/[\\/]/).pop();
+  if (t.public_url) return decodeURIComponent(t.public_url.split('/').pop() || 'file');
+  const src = t.source_url || '';
+  if (src.startsWith('magnet:')) return 'Magnet task — waiting for metadata';
+  try { return decodeURIComponent(new URL(src).pathname.split('/').filter(Boolean).pop() || src); } catch { return src.slice(0,80); }
+}
+function folderName(t) {
+  if (t.download_folder) return t.download_folder;
+  if (t.folder) return t.folder;
+  return 'Default Folder';
+}
+function typeIcon(t) {
+  const name = (shortName(t) || '').toLowerCase();
+  if (t.source_type === 'magnet') return '<div class="fileIcon">BT</div>';
+  if (/\.(mp4|mkv|mov|avi|webm)$/i.test(name)) return '<div class="fileIcon video">▶</div>';
+  if (!name || name === 'magnet') return '<div class="fileIcon unknown">?</div>';
+  return '<div class="fileIcon">FILE</div>';
+}
+function fmtBytes(n) {
+  if (typeof n === 'string' && n.trim()) return n;
+  n = Number(n || 0);
+  if (!n || !Number.isFinite(n)) return 'Unknown';
+  const units = ['B','KB','MB','GB','TB']; let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${n.toFixed(i ? 1 : 0)} ${units[i]}`;
+}
+function compactPath(p) {
+  p = String(p || '');
+  if (!p) return '';
+  if (p.length <= 72) return p;
+  return '…' + p.slice(-72);
+}
+function isDownloading(t) { return ['queued','pending','downloading','processing','paused'].includes(String(t.status).toLowerCase()); }
+function isUploading(t) { return ['uploading','moving'].includes(String(t.status).toLowerCase()); }
+function isCompleted(t) { return String(t.status).toLowerCase() === 'completed'; }
+function isFailed(t) { return ['failed','cancelled','error'].includes(String(t.status).toLowerCase()); }
+function filteredTasks() {
+  if (currentTab === 'downloading') return allTasks.filter(isDownloading);
+  if (currentTab === 'uploading') return allTasks.filter(isUploading);
+  if (currentTab === 'completed') return allTasks.filter(isCompleted);
+  if (currentTab === 'failed') return allTasks.filter(isFailed);
+  return allTasks;
+}
+function counts() {
+  return {
+    downloading: allTasks.filter(isDownloading).length,
+    uploading: allTasks.filter(isUploading).length,
+    completed: allTasks.filter(isCompleted).length,
+    failed: allTasks.filter(isFailed).length,
+  };
+}
+function updateCounts() {
+  const c = counts();
+  document.getElementById('countDownloading').textContent = c.downloading;
+  document.getElementById('countUploading').textContent = c.uploading;
+  document.getElementById('countCompleted').textContent = c.completed;
+  document.getElementById('footerDownloading').textContent = c.downloading;
+  document.getElementById('footerUploading').textContent = c.uploading;
+  document.getElementById('footerCompleted').textContent = c.completed;
+  document.getElementById('footerFailed').textContent = c.failed;
+}
+function renderModal() {
+  updateCounts();
+  document.querySelectorAll('.footerTab').forEach(x => x.classList.toggle('active', x.dataset.tab === currentTab));
+  const titleMap = { downloading:'Cloud Download Tasks', uploading:'Uploading Tasks', completed:'Completed Tasks', failed:'Earlier Failed Tasks' };
+  const list = filteredTasks();
+  document.getElementById('modalTitle').textContent = `${titleMap[currentTab] || 'Tasks'} (${list.length})`;
+  const box = document.getElementById('modalTaskList');
+  if (!list.length) {
+    box.innerHTML = `<div class="empty">No ${esc(currentTab)} tasks</div>`;
+    return;
+  }
+  box.innerHTML = list.map(t => {
+    const p = Math.max(0, Math.min(100, Number(t.progress || 0)));
+    const size = fmtBytes(t.total_size || t.totalLength || 0);
+    const err = t.error_message ? `<span class="err">${esc(t.error_message)}</span>` : '';
+    const ok = t.public_url ? `<a class="ok" href="${esc(t.public_url)}" target="_blank">Open file</a>` : '';
+    const folder = compactPath(folderName(t));
+    const folderLine = folder ? `<div class="taskMeta" title="${esc(folderName(t))}">📁 ${esc(folder)}</div>` : '';
+    const meta = isFailed(t) ? `${size} ${err || '<span class="err">Task failed</span>'}` : isCompleted(t) ? `${size} ${ok}` : `${size} ${esc(t.status)} ${esc(t.speed || '')}`;
+    const progress = (isDownloading(t) || isUploading(t)) ? `<div class="miniProgress"><div style="width:${p}%"></div></div>` : '';
+    return `<div class="taskRow">
+      ${typeIcon(t)}
+      <div title="${esc(t.source_url)}">
+        <div class="taskName">${esc(shortName(t))}</div>
+        ${folderLine}
+        <div class="taskMeta">${meta}</div>
+        ${progress}
+      </div>
+      <div class="taskActions">${taskButtons(t)}</div>
+    </div>`;
+  }).join('');
+}
+async function loadTasks() {
+  const res = await fetch('/api/tasks');
+  const data = await res.json();
+  allTasks = data.tasks || [];
+  updateCounts();
+  if (modalOpen) renderModal();
+}
+function taskButtons(t) {
+  const id = Number(t.id);
+  const status = String(t.status || '').toLowerCase();
+  const open = t.public_url ? `<a class="smallBtn primary" href="${esc(t.public_url)}" target="_blank">Open</a>` : '';
+  if (status === 'completed') return `${open}<button class="smallBtn danger" onclick="deleteOne(${id})">Delete</button>`;
+  if (status === 'paused') return `<button class="smallBtn primary" onclick="taskAction(${id}, 'resume')">Start</button><button class="smallBtn danger" onclick="taskAction(${id}, 'stop')">Stop</button><button class="smallBtn danger" onclick="deleteOne(${id})">Delete</button>`;
+  if (['failed','cancelled','error','stopped'].includes(status)) return `<button class="smallBtn primary" onclick="taskAction(${id}, 'retry')">Retry</button><button class="smallBtn danger" onclick="deleteOne(${id})">Delete</button>`;
+  if (['queued','pending'].includes(status)) return `<button class="smallBtn primary" onclick="taskAction(${id}, 'start')">Start</button><button class="smallBtn danger" onclick="taskAction(${id}, 'stop')">Stop</button>`;
+  return `<button class="smallBtn pause" onclick="taskAction(${id}, 'pause')">Pause</button><button class="smallBtn danger" onclick="taskAction(${id}, 'stop')">Stop</button>`;
+}
+function setTaskTab(tab) { currentTab = tab; renderModal(); }
+function openTaskModal(tab = currentTab) { currentTab = tab; modalOpen = true; document.getElementById('taskOverlay').classList.add('show'); document.getElementById('dockChevron').textContent = '⌄'; renderModal(); }
+function hideTaskModal() { modalOpen = false; document.getElementById('taskOverlay').classList.remove('show'); document.getElementById('dockChevron').textContent = '⌃'; }
+function toggleTaskModal() { modalOpen ? hideTaskModal() : openTaskModal(currentTab); }
+function closeTaskModal(e) { if (e.target.id === 'taskOverlay') hideTaskModal(); }
+async function taskAction(id, action) {
+  const res = await fetch(`/api/tasks/${id}/${action}`, { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.success === false) alert(data.error || `Failed to ${action} task`);
+  await loadTasks();
+}
+async function retryOne(id) { return taskAction(id, 'retry'); }
+async function retryFailed() {
+  const failed = allTasks.filter(isFailed);
+  for (const t of failed) await fetch(`/api/tasks/${Number(t.id)}/retry`, { method: 'POST' });
+  await loadTasks();
+}
+async function deleteOne(id) {
+  if (!confirm('Delete this task? Temp files will also be removed.')) return;
+  const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.success === false) alert(data.error || 'Delete failed');
+  await loadTasks();
+}
+async function clearCompletedLocal() {
+  const done = allTasks.filter(t => isCompleted(t) || isFailed(t));
+  if (!done.length) return;
+  if (!confirm(`Delete ${done.length} completed/failed task records?`)) return;
+  for (const t of done) await fetch(`/api/tasks/${Number(t.id)}`, { method: 'DELETE' });
+  await loadTasks();
+}
+
+setInterval(loadTasks, 2500);
+loadTasks();
+</script>
+</body>
+</html>
